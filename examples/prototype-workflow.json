@@ -1,0 +1,13 @@
+{
+ "client_token":"REPLACE_WITH_UNIQUE_CREATE_ID",
+ "title":"样机标签打印 - ZD888 30x20",
+ "steps":[
+  {"id":"click","type":"ButtonTrigger","title":"点击打印样机标签","next":"queue","data":{"button_type":"buttonField","table_name":"样机主表"}},
+  {"id":"queue","type":"AddRecordAction","title":"提交一张标签","next":null,"data":{"table_name":"样机标签打印队列","field_values":[
+   {"field_name":"样机编号","value":[{"value_type":"ref","value":"$.click.fldREPLACE_NUMBER"}]},
+   {"field_name":"记录链接","value":[{"value_type":"ref","value":"$.click.fldREPLACE_LINK"}]},
+   {"field_name":"来源记录","value":[{"value_type":"ref","value":"$.click.recordId"}]},
+   {"field_name":"状态","value":[{"value_type":"text","value":"待打印"}]}
+  ]}}
+ ]
+}

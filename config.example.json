@@ -1,0 +1,30 @@
+{
+  "cli_path": "C:/Users/YOUR_USER/AppData/Roaming/npm/node_modules/@larksuite/cli/bin/lark-cli.exe",
+  "runtime_dir": "runtime",
+  "poll_seconds": 5,
+  "fonts": {
+    "text": "C:/Windows/Fonts/msyh.ttc",
+    "mono": "C:/Windows/Fonts/consola.ttf",
+    "dot": "assets/fonts/Doto.ttf"
+  },
+  "profiles": [
+    {
+      "name": "material", "kind": "material",
+      "base_token": "BASE_MATERIAL", "source_table": "tblMaterial",
+      "queue_table": "tblMaterialQueue",
+      "printer": "ZDesigner ZD888-300dpi ZPL",
+      "fields": ["自动料号", "零件名称", "规格描述"],
+      "vertical_offset_mm": 1.0
+    },
+    {
+      "name": "prototype", "kind": "prototype",
+      "base_token": "BASE_DEMO", "source_table": "tblDemo",
+      "queue_table": "tblPrototypeQueue",
+      "feishu_host": "example.feishu.cn",
+      "printer": "ZDesigner ZD888-300dpi ZPL",
+      "fields": ["样机编号", "记录链接", "来源记录"],
+      "logo_path": "assets/sample-logo.png",
+      "vertical_offset_mm": 1.0
+    }
+  ]
+}

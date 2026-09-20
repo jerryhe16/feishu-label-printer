@@ -1,0 +1,13 @@
+{
+ "client_token":"REPLACE_WITH_UNIQUE_CREATE_ID",
+ "title":"物料标签打印 - ZD888 30x20",
+ "steps":[
+  {"id":"click","type":"ButtonTrigger","title":"点击打印标签","next":"queue","data":{"button_type":"buttonField","table_name":"物料主数据"}},
+  {"id":"queue","type":"AddRecordAction","title":"提交一张标签","next":null,"data":{"table_name":"标签打印队列","field_values":[
+   {"field_name":"自动料号","value":[{"value_type":"ref","value":"$.click.fldREPLACE_PART"}]},
+   {"field_name":"零件名称","value":[{"value_type":"ref","value":"$.click.fldREPLACE_NAME"}]},
+   {"field_name":"规格描述","value":[{"value_type":"ref","value":"$.click.fldREPLACE_SPEC"}]},
+   {"field_name":"状态","value":[{"value_type":"text","value":"待打印"}]}
+  ]}}
+ ]
+}
