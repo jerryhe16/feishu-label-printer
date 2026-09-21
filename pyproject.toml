@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "feishu-label-printer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Print Feishu Base row labels on a locally connected Zebra ZPL printer"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,9 @@ feishu-label-printer = "feishu_label_printer.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+feishu_label_printer = ["web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -14,10 +14,16 @@ def read_config(path):
         raise ValueError("poll_seconds must be at least 1")
     queues = set()
     for p in profiles:
-        if p["kind"] not in ("material", "prototype"):
-            raise ValueError("kind must be material or prototype")
-        if len(p["fields"]) != 3:
+        if p["kind"] not in ("material", "prototype", "template"):
+            raise ValueError("kind must be material, prototype or template")
+        if p["kind"] == "template" and not p.get("template_path"):
+            raise ValueError("template profiles require template_path")
+        if p["kind"] != "template" and len(p["fields"]) != 3:
             raise ValueError("fields must contain exactly three queue field names")
+        if not isinstance(p["fields"], list) or any(not isinstance(f,str) or not f for f in p["fields"]):
+            raise ValueError("fields must be an array of nonempty field names")
+        if p["kind"] == "template" and not p["fields"]:
+            raise ValueError("template profiles must project at least one queue field")
         key = (p["base_token"], p["queue_table"])
         if key in queues:
             raise ValueError("Each profile must have its own queue table")

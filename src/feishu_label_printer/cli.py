@@ -19,7 +19,15 @@ def main():
     worker.add_argument("--once", action="store_true")
     sub.add_parser("stop", help="Request graceful stop; current network/spool operation may finish")
     sub.add_parser("resume", help="Remove STOP marker; does not start a worker")
+    editor = sub.add_parser("editor", help="Open the local visual template editor; does not print")
+    editor.add_argument("--port", type=int, default=8765)
+    editor.add_argument("--templates-dir", default="templates")
+    editor.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
+    if args.command == "editor":
+        from .editor import editor_config, serve
+        serve(editor_config(args.config),args.templates_dir,args.port,not args.no_browser)
+        return
     config = read_config(args.config)
     if args.command == "preview":
         profile = profile_named(config, args.profile)

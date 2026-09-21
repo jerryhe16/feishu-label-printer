@@ -125,14 +125,23 @@ def prototype(config, profile, values):
 
 
 def render(config, profile, values):
+    if profile["kind"] == "template":
+        import json
+        from .templates import render_template
+        template = json.loads(resolve(config, profile["template_path"]).read_text(encoding="utf-8-sig"))
+        image, warnings = render_template(config, template, dict(zip(profile["fields"], values)))
+        if warnings:
+            raise ValueError("；".join(warnings))
+        return image
     return {"material": material, "prototype": prototype}[profile["kind"]](config, profile, values)
 
 
 def to_zpl(image):
-    if image.size != (WIDTH, HEIGHT):
-        raise ValueError("Expected a 354x236 image (30x20mm at 300dpi)")
-    padded = Image.new("1", ((WIDTH + 7) // 8 * 8, HEIGHT), 1)
+    width, height = image.size
+    if min(width, height) < 1 or width*height > 12_000_000:
+        raise ValueError("Invalid label pixel dimensions")
+    padded = Image.new("1", ((width + 7) // 8 * 8, height), 1)
     padded.paste(image.convert("1"), (0, 0))
     data = bytes(b ^ 255 for b in padded.tobytes())
-    return (f"^XA^PW{WIDTH}^LL{HEIGHT}^LH0,0^FO0,0^GFA,{len(data)},{len(data)},{(WIDTH + 7)//8},"
+    return (f"^XA^PW{width}^LL{height}^LH0,0^FO0,0^GFA,{len(data)},{len(data)},{(width + 7)//8},"
             + data.hex().upper() + "^FS^PQ1^XZ").encode("ascii")

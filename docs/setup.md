@@ -33,7 +33,8 @@ C:/Users/YOUR_USER/AppData/Roaming/npm/node_modules/@larksuite/cli/bin/lark-cli.
 | `fonts.text` / `fonts.mono` | 本机中文字体、料号字体；不随仓库分发 |
 | `fonts.dot` | 随仓库附带的Doto点阵字体 |
 | `profiles[].name` | 配置内唯一名称 |
-| `kind` | `material` 或 `prototype` |
+| `kind` | `material`、`prototype` 或 `template` |
+| `template_path` | `kind=template` 时必填，编辑器保存的JSON模板路径；见[排版工具](editor.md) |
 | `base_token` | 所在多维表格应用token |
 | `source_table` | 物料/样机源表ID |
 | `queue_table` | **专用打印队列表ID**，不能填源表 |

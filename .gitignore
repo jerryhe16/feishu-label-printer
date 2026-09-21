@@ -7,6 +7,7 @@ build/
 dist/
 config.local.json
 runtime/
+templates/
 private-assets/
 *.sqlite3*
 *.log
