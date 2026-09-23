@@ -133,3 +133,22 @@ def test_invalid_font_rejected(template):
     template["elements"][0]["font"] = []
     with pytest.raises(ValueError, match="字体名称"):
         validate(template)
+
+
+def test_adjustment_preview_keeps_valid_elements(config,template,row):
+    template['elements'][1]['font_size_pt']=40
+    issues=[]
+    image,_=render_template(config,template,row,issues=issues)
+    assert image.size==(354,236)
+    assert any(i['id']=='name' and '文字超出' in i['message'] for i in issues)
+    assert row['自动料号'] in [x.text for x in zxingcpp.read_barcodes(image.convert('L'))]
+    with pytest.raises(ValueError):render_template(config,template,row)
+
+
+def test_adjustment_preview_reports_each_bad_element(config,template,row):
+    template['elements'][0]['width_mm']=3
+    template['elements'][2]['y_mm']=25
+    issues=[]
+    image,_=render_template(config,template,row,issues=issues)
+    assert {'code','spec'} <= {i['id'] for i in issues}
+    assert ImageOps.invert(image.convert('L')).getbbox()

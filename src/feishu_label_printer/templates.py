@@ -126,14 +126,14 @@ def _font(config, element, dpi):
     return font
 
 
-def _text(box, value, font, align, wrap):
+def _text(box, value, font, align, wrap, clip=False):
     draw = ImageDraw.Draw(box)
     lines = []
     for paragraph in value.split("\n"):
         current = ""
         for char in paragraph:
             if draw.textlength(current + char, font=font) > box.width:
-                if not wrap or not current:
+                if (not wrap or not current) and not clip:
                     raise ValueError("文字超出宽度，请增大元素宽度或减小字号")
                 lines.append(current)
                 current = char
@@ -144,13 +144,13 @@ def _text(box, value, font, align, wrap):
     for i, line in enumerate(lines):
         y = i * line_height
         width = draw.textlength(line, font=font)
-        if width > box.width or (line and draw.textbbox((0, y), line, font=font, anchor="lt")[3] > box.height):
+        if not clip and (width > box.width or (line and draw.textbbox((0, y), line, font=font, anchor="lt")[3] > box.height)):
             raise ValueError("文字超出元素高度，请增大高度或减小字号")
         x = {"left": 0, "center": (box.width-width)/2, "right": box.width-width}[align]
         draw.text((x, y), line, font=font, fill=0, anchor="lt")
 
 
-def render_template(config, template, row):
+def render_template(config, template, row, issues=None):
     validate(template)
     if not isinstance(row, dict):
         raise ValueError("预览数据必须是JSON对象")
@@ -161,6 +161,10 @@ def render_template(config, template, row):
     result = Image.new("L", (width, height), 255)
     margins = page.get("margins_mm", {})
     warnings, boxes = [], []
+    def problem(element, message):
+        if issues is None:
+            raise ValueError(message)
+        issues.append({"id":element["id"], "message":message})
     for element in template["elements"]:
         if not element.get("enabled", True):
             continue
@@ -170,11 +174,11 @@ def render_template(config, template, row):
             raise ValueError(f"{name}：元素过大")
         x_mm, y_mm = element.get("x_mm", 0), element.get("y_mm", 0)
         if x_mm + element["width_mm"] > page["width_mm"]-margins.get("left", 0)-margins.get("right", 0)+0.001 or y_mm + element["height_mm"] > page["height_mm"]-margins.get("top", 0)-margins.get("bottom", 0)+0.001:
-            raise ValueError(f"{name}：元素超出页边距内的可用区域")
+            problem(element, f"{name}：超出页边距，请减小 X/Y 或元素宽高，也可增大标签尺寸")
         x = round((margins.get("left", 0)+page.get("offset_x_mm", 0)+x_mm)*scale)
         y = round((margins.get("top", 0)+page.get("offset_y_mm", 0)+y_mm)*scale)
         if x < 0 or y < 0 or x+ew > width or y+eh > height:
-            raise ValueError(f"{name}：偏移后元素超出纸张，请调整偏移或元素位置")
+            problem(element, f"{name}：偏移后超出纸张，请减小整体偏移或调整元素 X/Y")
         box = Image.new("L", (ew, eh), 255)
         try:
             value = "" if element["type"] == "image" else _content(element, row)
@@ -231,7 +235,12 @@ def render_template(config, template, row):
                 logo.thumbnail((ew, eh), Image.Resampling.LANCZOS)
                 box.paste(logo, ((ew-logo.width)//2, (eh-logo.height)//2))
         except (ValueError, OSError, Image.DecompressionBombError, qrcode.exceptions.DataOverflowError) as error:
-            raise ValueError(f"{name}：{error}") from None
+            problem(element, f"{name}：{error}")
+            if element["type"] == "text" and value:
+                try:
+                    _text(box, value, _font(config, element, dpi), element.get("align", "left"), element.get("wrap", True), clip=True)
+                except (ValueError, OSError):
+                    pass
         for previous, px, py, pw, ph in boxes:
             if x < px+pw and x+ew > px and y < py+ph and y+eh > py:
                 warnings.append(f"「{name}」与「{previous}」区域重叠")

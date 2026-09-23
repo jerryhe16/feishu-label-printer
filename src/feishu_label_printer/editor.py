@@ -183,14 +183,15 @@ def make_server(config, directory, port=8765):
                     store.save(payload["name"],template)
                     self.send(200,{"saved":store.list(),"file":payload["name"]})
                 elif self.path in ("/api/render","/api/export-zpl"):
-                    image, warnings = render_template(config,template,payload.get("row",{}))
+                    issues = [] if self.path == "/api/render" else None
+                    image, warnings = render_template(config,template,payload.get("row",{}), issues=issues)
                     if self.path == "/api/export-zpl":
                         if warnings: raise ValueError("请先处理排版提示："+"；".join(warnings))
                         self.send(200,to_zpl(image),"application/octet-stream")
                     else:
                         output = io.BytesIO(); image.save(output,format="PNG")
                         self.send(200,{"image":"data:image/png;base64,"+base64.b64encode(output.getvalue()).decode(),
-                                       "width":image.width,"height":image.height,"warnings":warnings,"fields":required_fields(template)})
+                                       "width":image.width,"height":image.height,"warnings":warnings,"issues":issues,"fields":required_fields(template)})
                 else:
                     self.send(404,{"error":"Not found"})
             except (ValueError, OSError, TypeError, KeyError, OverflowError, subprocess.TimeoutExpired) as error:

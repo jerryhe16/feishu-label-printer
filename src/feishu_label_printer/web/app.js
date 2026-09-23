@@ -4,7 +4,7 @@ const token = document.querySelector('meta[name="editor-token"]').content;
 const clone = value => JSON.parse(JSON.stringify(value));
 const kindNames = {text:'文字',barcode:'条码',qr:'二维码',image:'Logo'};
 const glyphs = {text:'T',barcode:'▥',qr:'▦',image:'▧'};
-const state = {template:null,row:{},selected:null,file:'',dirty:false,history:[],future:[],scale:12,saved:[],version:0,valid:false,image:null};
+const state = {template:null,row:{},selected:null,file:'',dirty:false,history:[],future:[],scale:12,saved:[],version:0,valid:false,image:null,issues:[]};
 let presets={},fontNames=[],timer,toastTimer,imageReplace=false;
 
 async function api(path, payload) {
@@ -76,6 +76,7 @@ function drawOverlays(){
   $('overlays').replaceChildren(...state.template.elements.filter(e=>e.enabled!==false).map(e=>{
     const div=document.createElement('div');div.className='overlay'+(state.selected===e.id?' selected':'');div.dataset.id=e.id;
     Object.assign(div.style,{left:(left+(e.x_mm||0))*scale+'px',top:(top+(e.y_mm||0))*scale+'px',width:e.width_mm*scale+'px',height:e.height_mm*scale+'px'});
+    const issue=state.issues.find(i=>i.id===e.id);if(issue){div.classList.add('has-issue');div.title=issue.message;}
     const tag=document.createElement('span');tag.className='overlay-label';tag.textContent=e.name||kindNames[e.type];div.append(tag);
     if(e.id===state.selected){const handle=document.createElement('span');handle.className='resize';div.append(handle);}
     div.onpointerdown=ev=>startDrag(ev,e);return div;
@@ -109,11 +110,12 @@ function schedule(){state.valid=false;$('downloadPng').disabled=true;$('download
 async function render(version){
   try{
     const result=await api('/api/render',{template:state.template,row:state.row});if(version!==state.version)return;
-    state.image=result.image;state.valid=true;$('preview').src=result.image;$('preview').hidden=false;$('previewError').hidden=true;
-    $('downloadPng').disabled=false;$('downloadZpl').disabled=!!result.warnings.length;
+    state.issues=result.issues||[];state.image=result.image;state.valid=!state.issues.length;drawOverlays();$('preview').src=result.image;$('preview').hidden=false;$('previewError').hidden=true;
+    $('downloadPng').disabled=!state.valid;$('downloadZpl').disabled=!state.valid||!!result.warnings.length;
     $('renderStatus').className=result.warnings.length?'warning':'';
     $('renderStatus').textContent=result.warnings.length?result.warnings.join('；'):`布局检查通过 · ${result.width} × ${result.height} 打印点`;
-  }catch(error){if(version!==state.version)return;state.valid=false;$('preview').hidden=true;$('previewError').hidden=false;$('previewError').textContent='请调整布局后查看预览';$('renderStatus').className='error';$('renderStatus').textContent=error.message;}
+    showIssues(state.issues);if(state.issues.length){$('renderStatus').className='warning';$('renderStatus').textContent='当前为调整预览，红框元素需要处理；点击下方问题直接定位。';}
+  }catch(error){if(version!==state.version)return;state.valid=false;$('preview').hidden=true;$('previewError').hidden=true;showIssues([{message:error.message}]);$('renderStatus').className='error';$('renderStatus').textContent=error.message;}
 }
 function add(type,extra={}){
   const field=Object.keys(state.row)[0]||'字段';const p=state.template.page,m=p.margins_mm||{};
@@ -236,4 +238,8 @@ function initSource(){
       const {url,name,base_token,table_id,view_id}=connectedSource;state.template.data_source={url,name,base_token,table_id,view_id};state.selected=state.template.elements.at(-1)?.id;
     });syncData();syncInspector();schedule();persist();$('sourceDialog').close();toast('已绑定字段并载入记录，请检查布局；空间不足时需调整尺寸或位置。');
   };
+}
+
+function showIssues(issues){
+  $('layoutIssues').replaceChildren(...issues.map(issue=>{const button=document.createElement('button');button.className='layout-issue';button.textContent=issue.message+(issue.id?' → 调整此元素':'');button.onclick=()=>{if(issue.id){select(issue.id);$('inspector').scrollIntoView({block:'nearest'});}};return button;}));
 }
