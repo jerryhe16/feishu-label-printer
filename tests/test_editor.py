@@ -65,3 +65,17 @@ def test_invalid_template_is_reported(service):
     headers={"X-Editor-Token":token_for(request)}
     status,body=request("POST","/api/validate",{"template":{"version":3}},headers)
     assert status==400 and "version" in json.loads(body)["error"]
+
+
+def test_source_http_uses_server_connection(service, monkeypatch):
+    from feishu_label_printer import editor_source
+    request,_=service
+    headers={'X-Editor-Token':token_for(request)}
+    monkeypatch.setattr(editor_source,'connect',lambda config,url:{'base_token':'demo','table_id':'tblDemo','fields':[]})
+    monkeypatch.setattr(editor_source,'records',lambda config,source,fields,offset:{'records':[], 'has_more':False})
+    assert request('POST','/api/source/connect',{'url':'demo'})[0]==403
+    status,body=request('POST','/api/source/connect',{'url':'demo'},headers)
+    assert status==200
+    connection=json.loads(body)['connection_id']
+    assert request('POST','/api/source/records',{'connection_id':connection,'fields':['fld1']},headers)[0]==200
+    assert request('POST','/api/source/records',{'connection_id':'forged','fields':['fld1']},headers)[0]==400

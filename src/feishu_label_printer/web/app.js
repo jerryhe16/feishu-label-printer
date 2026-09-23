@@ -36,6 +36,8 @@ function sync(){
   $('undo').disabled=!state.history.length;$('redo').disabled=!state.future.length;
   $('emptyHint').hidden=state.template.elements.some(e=>e.enabled!==false);
   syncElements();syncInspector();drawOverlays();
+  $('sourceSummary').textContent=state.template.data_source?.name||'粘贴表格链接，勾选字段，选择真实记录预览。';
+  $('chooseRecord').hidden=!state.template.data_source;
 }
 function syncElements(){
   $('elementCount').textContent=state.template.elements.length;
@@ -125,7 +127,7 @@ function fileStem(){return state.template.name.replace(/[^\p{L}\p{N}_ -]/gu,'-')
 async function save(){
   const name=$('saveName').value.trim();$('saveError').textContent='';
   if(name!==state.file&&state.saved.some(s=>s.file===name)&&!confirm('同名模板已存在，是否覆盖？'))return;
-  try{const result=await api('/api/templates',{name,template:state.template});state.file=result.file;state.dirty=false;updateSaved(result.saved);$('saveDialog').close();sync();persist();toast('模板已保存，可用于打印队列');}
+  try{const result=await api('/api/templates',{name,template:state.template});state.file=result.file;state.dirty=false;updateSaved(result.saved);$('saveDialog').close();sync();persist();toast('模板已保存；打印接入状态见保存窗口提示');}
   catch(error){$('saveError').textContent=error.message;}
 }
 function undo(redo=false){const from=redo?state.future:state.history,to=redo?state.history:state.future;if(!from.length)return;to.push(clone(state.template));state.template=from.pop();state.dirty=true;sync();schedule();persist();}
@@ -133,6 +135,7 @@ function bindElement(id,key,convert=value=>value){$(id).onchange=()=>{const e=se
 function bindPage(id,key){$(id).onchange=()=>{if($(id).value==='')return;const value=Number($(id).value);if(Number.isFinite(value))edit(()=>state.template.page[key]=value);};}
 
 async function init(){
+  initSource();
   let draft;try{draft=JSON.parse(localStorage.getItem('label-studio-draft-v1'));}catch{}
   const bootstrap=await api('/api/bootstrap');presets=bootstrap.templates;fontNames=bootstrap.fonts;state.row=bootstrap.sample;updateSaved(bootstrap.saved);
   $('fontFamily').replaceChildren(...fontNames.map(key=>option(key,{text:'中文 / 常规',mono:'等宽',dot:'点阵 Doto'}[key]||key)));
@@ -157,7 +160,7 @@ async function init(){
   $('zoom').onchange=()=>{state.scale=Number($('zoom').value);drawOverlays();};$('showGuides').onchange=drawOverlays;
   $('fit').onclick=()=>{state.scale=Math.min(20,Math.max(2,Math.min(($('stage').clientWidth-100)/state.template.page.width_mm,($('stage').clientHeight-100)/state.template.page.height_mm)));drawOverlays();};
   $('paper').onpointerdown=ev=>{if(ev.target.id==='paper'||ev.target.id==='overlays')select(null);};
-  $('save').onclick=()=>{$('saveName').value=state.file||fileStem();$('saveError').textContent='';$('saveDialog').showModal();};$('confirmSave').onclick=save;
+  $('save').onclick=()=>{$('saveName').value=state.file||fileStem();$('saveError').textContent='';$('saveDialog').showModal();$('queueCheck').textContent='正在检查打印字段…';api('/api/source/check',{template:state.template}).then(r=>$('queueCheck').textContent=r.message).catch(e=>$('queueCheck').textContent=e.message);};$('confirmSave').onclick=save;
   $('exportTemplate').onclick=()=>download(fileStem()+'.json',new Blob([JSON.stringify(state.template,null,2)],{type:'application/json'}));
   $('downloadPng').onclick=()=>{if(state.valid){const bytes=Uint8Array.from(atob(state.image.split(',')[1]),c=>c.charCodeAt(0));download(fileStem()+'.png',new Blob([bytes],{type:'image/png'}));}};
   $('downloadZpl').onclick=async()=>{try{const response=await fetch('/api/export-zpl',{method:'POST',headers:{'Content-Type':'application/json','X-Editor-Token':token},body:JSON.stringify({template:state.template,row:state.row})});if(!response.ok)throw Error((await response.json()).error);download(fileStem()+'.zpl',await response.blob());}catch(e){toast(e.message);}};
@@ -188,3 +191,49 @@ async function init(){
   }
 }
 init().catch(error=>{$('renderStatus').className='error';$('renderStatus').textContent='启动失败：'+error.message;});
+
+let connectedSource=null,sourceRows=[],sourceOffset=0,sourceMore=false,sourceNext=0,sourceBusy=false;
+function picks(){return [...$('sourceFields').querySelectorAll('input:checked')].map(input=>({field:connectedSource.fields.find(f=>f.id===input.dataset.field),type:input.value}));}
+function sourceMessage(text){$('sourceStatus').textContent=text;}
+function sourceLock(busy){sourceBusy=busy;$('sourceUrl').disabled=busy;$('sourceFields').querySelectorAll('input').forEach(input=>input.disabled=busy||!connectedSource?.fields.find(f=>f.id===input.dataset.field)?.supported);for(const id of ['readSource','readRecords','applySource','previousRecords','nextRecords'])$(id).disabled=busy;}
+function invalidateRecords(){sourceRows=[];$('recordStep').hidden=true;}
+async function fetchSourceRecords(offset=0){
+  const selected=picks();if(!selected.length)return sourceMessage('请至少勾选一个字段的呈现方式。');
+  sourceLock(true);invalidateRecords();sourceMessage('正在读取预览记录…');
+  try{const result=await api('/api/source/records',{connection_id:connectedSource.connection_id,fields:[...new Set(selected.map(p=>p.field.id))],offset});
+    sourceRows=result.records;sourceOffset=offset;sourceMore=result.has_more;sourceNext=result.next_offset;
+    $('sourceRecord').replaceChildren(...sourceRows.map((r,i)=>option(String(i),Object.values(r.values).filter(Boolean).join(' · ').slice(0,90)||r.id)));
+    $('recordStep').hidden=!sourceRows.length;$('recordSummary').textContent=`第 ${offset+1}–${offset+sourceRows.length} 条${sourceMore?'，还有更多记录':''}`;
+    sourceMessage(sourceRows.length?'选择一条记录，点击“应用字段并预览”。':'当前范围没有记录，可检查表格或视图筛选。');
+  }catch(e){sourceMessage(e.message);}finally{sourceLock(false);$('previousRecords').disabled=sourceOffset===0;$('nextRecords').disabled=!sourceMore;}
+}
+function initSource(){
+  const open=()=>{$('sourceUrl').value=state.template.data_source?.url||$('sourceUrl').value;$('sourceDialog').showModal();};
+  $('connectSource').onclick=open;$('chooseRecord').onclick=open;
+  $('readSource').onclick=async()=>{
+    sourceLock(true);invalidateRecords();connectedSource=null;$('sourceFields').replaceChildren();$('readRecords').hidden=true;sourceMessage('正在连接飞书并读取字段…');
+    try{connectedSource=await api('/api/source/connect',{url:$('sourceUrl').value.trim()});
+      sourceMessage(`已连接：${connectedSource.name} · ${connectedSource.fields.length} 个字段。勾选要打印的内容：`);
+      $('sourceFields').replaceChildren(...connectedSource.fields.map(f=>{
+        const row=document.createElement('div');row.className='source-field';const title=document.createElement('strong');title.textContent=f.name;const detail=document.createElement('small');detail.textContent=f.supported?f.type:'此类型暂不支持';row.append(title,detail);
+        for(const type of ['text','barcode','qr']){const label=document.createElement('label');label.className='inline-check';const input=document.createElement('input');input.type='checkbox';input.value=type;input.dataset.field=f.id;input.disabled=!f.supported;input.setAttribute('aria-label',`${f.name} · ${kindNames[type]}`);input.checked=f.supported&&state.template.elements.some(e=>e.source?.kind==='field'&&e.source.key===f.name&&e.type===type&&e.enabled!==false);input.onchange=invalidateRecords;label.append(input,kindNames[type]);row.append(label);}return row;
+      }));$('readRecords').hidden=false;
+    }catch(e){sourceMessage(e.message);}finally{sourceLock(false);}
+  };
+  $('readRecords').onclick=()=>fetchSourceRecords();$('previousRecords').onclick=()=>fetchSourceRecords(Math.max(0,sourceOffset-20));$('nextRecords').onclick=()=>fetchSourceRecords(sourceNext);
+  $('applySource').onclick=()=>{
+    const row=sourceRows[Number($('sourceRecord').value)],choices=picks();if(!row||!choices.length)return;
+    if(choices.length+state.template.elements.filter(e=>!$('replaceFields').checked||e.source?.kind!=='field').length>60)return sourceMessage('最多可放置 60 个元素，请减少选择。');
+    state.row={...row.values};
+    edit(()=>{
+      const existing=state.template.elements.filter(e=>e.source?.kind==='field');
+      if($('replaceFields').checked)state.template.elements=state.template.elements.filter(e=>e.source?.kind!=='field');
+      const p=state.template.page,m=p.margins_mm||{},w=p.width_mm-(m.left||0)-(m.right||0),h=p.height_mm-(m.top||0)-(m.bottom||0);
+      let y=0;
+      for(const choice of choices){const previous=$('replaceFields').checked&&existing.find(e=>e.source.key===choice.field.name&&e.type===choice.type);if(previous){state.template.elements.push(previous);y=Math.max(y,previous.y_mm+previous.height_mm+0.5);continue;}const height=Math.min(h,choice.type==='qr'?15:choice.type==='barcode'?8:4),width=choice.type==='qr'?Math.min(w,height):w;
+        state.template.elements.push({id:crypto.randomUUID(),name:choice.field.name+' · '+kindNames[choice.type],type:choice.type,enabled:true,source:{kind:'field',key:choice.field.name},x_mm:0,y_mm:Math.min(y,Math.max(0,h-height)),width_mm:width,height_mm:height,font:choice.type==='barcode'?'mono':'text',font_size_pt:choice.type==='barcode'?5.5:6,wrap:true,show_text:true});y+=height+0.5;
+      }
+      const {url,name,base_token,table_id,view_id}=connectedSource;state.template.data_source={url,name,base_token,table_id,view_id};state.selected=state.template.elements.at(-1)?.id;
+    });syncData();syncInspector();$('sourceDialog').close();toast('已绑定字段并载入记录，请检查布局；空间不足时需调整尺寸或位置。');
+  };
+}

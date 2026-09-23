@@ -4,6 +4,7 @@ import io
 import json
 import re
 import secrets
+import subprocess
 import tempfile
 import threading
 import webbrowser
@@ -14,6 +15,7 @@ from urllib.parse import urlparse, parse_qs
 
 from .labels import to_zpl
 from .templates import render_template, required_fields, validate
+from . import editor_source
 
 
 def editor_config(path=None):
@@ -97,6 +99,7 @@ class TemplateStore:
 def make_server(config, directory, port=8765):
     store = TemplateStore(directory)
     token = secrets.token_urlsafe(32)
+    sources = {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -157,7 +160,22 @@ def make_server(config, directory, port=8765):
                     self.send(413,{"error":"请求过大（最多6MB）"}); return
                 payload = json.loads(self.rfile.read(size))
                 if not isinstance(payload,dict): raise ValueError("请求必须是对象")
+                if self.path == "/api/source/connect":
+                    source = editor_source.connect(config, payload.get("url"))
+                    source_id = secrets.token_urlsafe(16)
+                    if len(sources) >= 30: sources.pop(next(iter(sources)))
+                    sources[source_id] = source
+                    self.send(200, {**source, "connection_id":source_id})
+                    return
+                if self.path == "/api/source/records":
+                    source = sources.get(payload.get("connection_id", ""))
+                    if not source: raise ValueError("请先连接或重新连接数据表")
+                    self.send(200, editor_source.records(config, source, payload.get("fields"), payload.get("offset",0)))
+                    return
                 template = payload["template"]
+                if self.path == "/api/source/check":
+                    self.send(200, {"message":editor_source.readiness(config, template)})
+                    return
                 if self.path == "/api/validate":
                     validate(template)
                     self.send(200,{"valid":True,"fields":required_fields(template)})
@@ -175,7 +193,7 @@ def make_server(config, directory, port=8765):
                                        "width":image.width,"height":image.height,"warnings":warnings,"fields":required_fields(template)})
                 else:
                     self.send(404,{"error":"Not found"})
-            except (ValueError, OSError, TypeError, KeyError, OverflowError) as error:
+            except (ValueError, OSError, TypeError, KeyError, OverflowError, subprocess.TimeoutExpired) as error:
                 self.send(400,{"error":str(error)})
     server = ThreadingHTTPServer(("127.0.0.1",port),Handler)
     server.daemon_threads = True
