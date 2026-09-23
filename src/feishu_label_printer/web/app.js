@@ -234,6 +234,6 @@ function initSource(){
         state.template.elements.push({id:crypto.randomUUID(),name:choice.field.name+' · '+kindNames[choice.type],type:choice.type,enabled:true,source:{kind:'field',key:choice.field.name},x_mm:0,y_mm:Math.min(y,Math.max(0,h-height)),width_mm:width,height_mm:height,font:choice.type==='barcode'?'mono':'text',font_size_pt:choice.type==='barcode'?5.5:6,wrap:true,show_text:true});y+=height+0.5;
       }
       const {url,name,base_token,table_id,view_id}=connectedSource;state.template.data_source={url,name,base_token,table_id,view_id};state.selected=state.template.elements.at(-1)?.id;
-    });syncData();syncInspector();$('sourceDialog').close();toast('已绑定字段并载入记录，请检查布局；空间不足时需调整尺寸或位置。');
+    });syncData();syncInspector();schedule();persist();$('sourceDialog').close();toast('已绑定字段并载入记录，请检查布局；空间不足时需调整尺寸或位置。');
   };
 }
